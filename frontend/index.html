@@ -28,6 +28,17 @@
     input {
       font-size: 2rem;
     }
+
+    .compare-container {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .compare-column {
+      flex: 1;
+      min-width: 300px;
+    }
   </style>
   <title>Vote Cost 2024</title>
   <link rel="manifest" href="votecost.webmanifest" />
@@ -41,10 +52,31 @@
       </v-app-bar>
       <v-main>
         <v-container fluid>
-          <v-autocomplete @update:model-value="findresults" label="Choose a constituency (start typing a name)" :items="constituencies"
-            item-title="constituency" v-model="constituency"></v-autocomplete>
-          <v-alert v-if="message">{{message}}</v-alert>
-          <v-data-table v-if="!nodata" hide-default-footer :items="showdata" v-model:sort-by="sortBy"></v-data-table>
+          <v-switch v-model="compareMode" label="Compare two constituencies" color="primary" class="mb-4"></v-switch>
+          
+          <!-- Single constituency mode -->
+          <div v-if="!compareMode">
+            <v-autocomplete @update:model-value="findresults" label="Choose a constituency (start typing a name)" :items="constituencies"
+              item-title="constituency" v-model="constituency"></v-autocomplete>
+            <v-alert v-if="message">{{message}}</v-alert>
+            <v-data-table v-if="!nodata" hide-default-footer :items="showdata" v-model:sort-by="sortBy"></v-data-table>
+          </div>
+
+          <!-- Compare mode -->
+          <div v-else class="compare-container">
+            <div class="compare-column">
+              <v-autocomplete @update:model-value="findresults" label="First constituency" :items="constituencies"
+                item-title="constituency" v-model="constituency"></v-autocomplete>
+              <v-alert v-if="message" class="mb-2">{{message}}</v-alert>
+              <v-data-table v-if="!nodata" hide-default-footer :items="showdata" v-model:sort-by="sortBy" density="compact"></v-data-table>
+            </div>
+            <div class="compare-column">
+              <v-autocomplete @update:model-value="findresults2" label="Second constituency" :items="constituencies"
+                item-title="constituency" v-model="constituency2"></v-autocomplete>
+              <v-alert v-if="message2" class="mb-2">{{message2}}</v-alert>
+              <v-data-table v-if="!nodata2" hide-default-footer :items="showdata2" v-model:sort-by="sortBy2" density="compact"></v-data-table>
+            </div>
+          </div>
         </v-container>
       </v-main>
       <v-footer class="text-center d-flex flex-column ga-2 py-4">
@@ -86,6 +118,14 @@
         const nodata = ref(true)
         const sortBy = ref([{ key: 'Position', order: 'asc' }])
 
+        // compare mode state
+        const compareMode = ref(false)
+        const constituency2 = ref('')
+        const showdata2 = ref([])
+        const nodata2 = ref(true)
+        const sortBy2 = ref([{ key: 'Position', order: 'asc' }])
+        const message2 = ref('')
+
         async function fetchconstituencies() {
           const rawResponse = await fetch(url, {
             method: 'POST',
@@ -124,6 +164,29 @@
           //console.log(showdata)  
         }
 
+        async function findresults2(constituencyName) {
+          const rawResponse = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ "sql": 'select * from expenditure inner join results on expenditure.resultid = results.id where constituency = ? ', "params": [constituencyName] })
+          });
+          //get just the data we want into the array
+          showdata2.value = (await rawResponse.json()).message.map(function (i) {
+            return {
+              Position: i.candidate_result_position,
+              Candidate: `${i.candidate_given_name} ${i.candidate_family_name}`,
+              Party: i.candidate_party,
+              Votes: i.candidate_vote_count,
+              Spending: new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(i.total_reported_spending),
+              "Cost per Vote": new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format((i.total_reported_spending / i.candidate_vote_count).toFixed(2))
+            }
+          })
+          nodata2.value = false
+        }
+
         //hydrate constituencies
         fetchconstituencies()
 
@@ -137,7 +200,14 @@
           message,
           showdata,
           nodata,
-          sortBy
+          sortBy,
+          compareMode,
+          constituency2,
+          showdata2,
+          nodata2,
+          sortBy2,
+          findresults2,
+          message2
         }
       }
     }).use(vuetify).mount('#app')
